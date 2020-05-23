@@ -1,18 +1,20 @@
 const Card = require("./Card.js");
+const Player = require("./Player.js");
 
 let players = [];
 let cards = [];
+let currentPlayer = null;
 let table = [];
 let inProgress = false;
 let numbers = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"];
 let suites = ["Spade", "Club", "Diamond", "Heart"];
 
-function addPlayer(player){
+function addPlayer(player, id){
     if(inProgress){
         return "Error: Match is currently in progress!";
     }
     if(players.length <= 4){
-        players.push(player);
+        players.push(new Player(player, id));
         return "User " + player + " joined the game";
     } else {
         return "Error: Max player limit reached!";
@@ -20,16 +22,29 @@ function addPlayer(player){
 }
 
 function start(){
+    let returnObject = {
+        boolean: false,
+        message: ""
+    };
     if(inProgress){
-        return "Error: You can't start a game that is already in progress!";
+        returnObject.boolean = false;
+        returnObject.message = "Error: You can't start a game that is already in progress!"
+        return returnObject;
+    }
+    if(players.length === 1 || players.length === 0){
+        returnObject.boolean = false;
+        returnObject.message = "Sorry, you can't play by yourself :(";
+        inProgress = false;
+        return returnObject;
     }
     cards = createDeck();
-    let message = distributeCards(players.length);
+    distributeCards(players.length);
+    currentPlayer = players.indexOf(findThreeOfSpades());
     inProgress = true;
-    return message;
+    returnObject.boolean = true;
+    return returnObject;
 }
 
-//Fisher-Yates (aka Knuth) Shuffle.
 function createDeck(){
     let newDeck = [];
     suites.forEach(suite => {
@@ -41,6 +56,7 @@ function createDeck(){
     return newDeck;
 }
 
+//Fisher-Yates (aka Knuth) Shuffle.
 function shuffle(cards){
     let currentIndex = cards.length, temporaryValue, randomIndex;
     // While there remain elements to shuffle...
@@ -58,31 +74,53 @@ function shuffle(cards){
     return cards;
 }
 
-function distributeCards(length){
-    let playerCards = [];
-    switch(length){
-        case 1:
-            inProgress = false;
-            return "Sorry, you can't play with yourself :("
-        case 2:
-            playerCards.push(cards.splice(0, 13));
-            playerCards.push(cards.splice(0, 13));
-            return playerCards;
-        case 3:
-            playerCards.push(cards.splice(0, 13));
-            playerCards.push(cards.splice(0, 13));
-            playerCards.push(cards.splice(0, 13));
-            return playerCards;
-        case 4:
-            playerCards.push(cards.splice(0, 13));
-            playerCards.push(cards.splice(0, 13));
-            playerCards.push(cards.splice(0, 13));
-            playerCards.push(cards.splice(0, 13));
-            return playerCards;
+function contains(cards, number, suite){
+    let i = 0;
+    while(i < cards.length){
+        if(cards[i].getNumber() === number && cards[i].getSuite() === suite){
+            return true;
+        }
+        i++;
     }
+    return false;
+}
+
+function organizeCards(cards){
+    let organized = [];
+    numbers.forEach(number => {
+       suites.forEach(suite => {
+            if(contains(cards, number, suite)){
+                organized.push(new Card(number, suite));
+            }
+       });
+    });
+    return organized;
+}
+
+function distributeCards(length){
+    for(let i = 0; i < length; i++){
+        players[i].giveCards(organizeCards(cards.splice(0, 13)));
+    }
+}
+
+function findThreeOfSpades(){
+    let i = 0;
+    while(i < players.length){
+        if(contains(players[i].cards, "3", "Spade")) {
+            return players[i];
+        }
+        i++;
+    }
+    //if no one has a 3 of spades, first player is returned
+    return players[0];
+}
+
+function getPlayers(){
+    return players;
 }
 
 module.exports = {
     addPlayer,
-    start
+    start,
+    getPlayers
 }
