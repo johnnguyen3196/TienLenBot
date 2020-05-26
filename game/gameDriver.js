@@ -249,7 +249,9 @@ function play(cardsIndex, username){
 }
 
 function validPlay(cards){
-    //TODO make exception for bombs
+    if(bombDetector(cards)){
+        return "Bomb";
+    }
     if(cards.length !== table.size && table.size !== 0){
         return false;
     }
@@ -288,6 +290,9 @@ function compareToTable(cards, type){
     if(table.cards.length === 0){
         return true;
     }
+    if(table.type === "Single" && table.cards[0].getNumber() === "2" && type === "Bomb"){
+        return true;
+    }
     if(type !== table.type){
         return false;
     }
@@ -308,9 +313,10 @@ function compareToTable(cards, type){
 }
 
 function removeCards(index, playerIndex){
-    index.forEach(index => {
-       players[playerIndex].cards.splice(index, 1);
-    });
+    //Remove cards from the end since splice creates a new array and messes up indices
+    for(let i = index.length - 1; i >= 0; i--) {
+        players[playerIndex].cards.splice(index[i], 1);
+    }
 }
 
 function resetGame(){
@@ -318,6 +324,30 @@ function resetGame(){
     currentPlayer = null;
     table = null;
     inProgress = false;
+}
+
+function indexOfNumber(number){
+    return numbers.indexOf(number);
+}
+
+function bombDetector(cards){
+    //four of a kind
+    if(cards.length === 4) {
+        let number = cards[0].getNumber();
+        for(let i = 1; i < cards.length; i++){
+            if(cards[i].getNumber() !== number){
+                return false;
+            }
+        }
+        return true;
+    }
+    //double sequence
+    if(cards.length === 6){
+        if(numbers.indexOf(cards[4].getNumber()) - numbers.indexOf(cards[2].getNumber()) === 1 && numbers.indexOf(cards[2].getNumber()) - numbers.indexOf(cards[0].getNumber()) === 1){
+            return true;
+        }
+    }
+    return false;
 }
 
 module.exports = {
@@ -330,5 +360,6 @@ module.exports = {
     handleSkip,
     validPlay,
     play,
-    resetGame
+    resetGame,
+    indexOfNumber,
 }
