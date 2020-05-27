@@ -1,8 +1,9 @@
 const Discord = require('discord.js');
 const bot = new Discord.Client();
 const token = require('./key.js');
-const {addPlayer,start,getPlayers, getTableCards, getCurrentPlayer, getPlayerByUserName, handleSkip, play, resetGame, indexOfNumber} = require("./game/gameDriver");
-const Card = require("./game/Card.js");
+const Game = require("./game/Game");
+const Card = require("./game/Card");
+const Player = require("./game/Player");
 
 function suiteToEmoji(suite){
     switch(suite){
@@ -22,7 +23,7 @@ function displayCards(cards){
     for(let i = 0; i < cards.length; i++){
         message = message + i + ": " + discordNumber[indexOfNumber(cards[i].getNumber())] + " of " + suiteToEmoji(cards[i].getSuite()) + "\n";
     }
-    return message;
+    return message + "\n---------------------------------------------------";
 }
 
 function displayAbout(){
@@ -40,14 +41,47 @@ function displayAbout(){
             displayCards(exampleCards);
 }
 
+function getGameById(id){
+    return games.get(id);
+}
+
+function addUser(id, username){
+    let newUser = new Player(username, id)
+    usersMap.set(id, newUser);
+    return newUser;
+}
+
+function getGameIdFromUser(userId){
+    let user = usersMap.get(userId);
+    return user.gameId;
+}
+
+function resetUsers(users){
+    users.forEach(user => {
+       usersMap.set(user.id, new Player(user.name, user.id));
+    });
+}
+
+function removeGameById(id){
+    games.delete(id);
+}
+
+function indexOfNumber(number){
+    return numbers.indexOf(number);
+}
+
 const PREFIX = '!13';
 const spade = "<:spade:714922167560568954>";
 const club = "<:club:714921850999930991>";
 const diamond = "<:diamond:714920441612861590>"
 const heart = ":heart:";
-const discordNumber = [":three:", ":four:", ":five:", ":six:", ":seven:", ":eight:", ":nine:", ":ten:", ":regional_indicator_j:", ":regional_indicator_q:", ":regional_indicator_k:", ":regional_indicator_a:", ":two:"];
+const discordNumber = [":three:", ":four:", ":five:", ":six:", ":seven:", ":eight:", ":nine:", ":one::zero:", ":regional_indicator_j:", ":regional_indicator_q:", ":regional_indicator_k:", ":regional_indicator_a:", ":two:"];
+const numbers = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"];
 
 bot.login(token);
+
+let games = new Map();
+let usersMap = new Map();
 
 bot.on('ready', () => {
     console.log('Bot online');
@@ -60,46 +94,113 @@ bot.on('message', message => {
         case 'about':
             message.channel.send(displayAbout());
             break;
+
+        case 'create':
+            if(args.length < 2){
+                message.reply("Error creating a game. Remember to create an 'id' for the game");
+                return;
+            }
+            if(games.has(args[1])){
+                message.reply("Error creating a game. This game id already exists");
+                return;
+            }
+            games.set(args[1], new Game(args[1]));
+            message.channel.send("Game with id: '" + args[1] + "' successfully created");
+            break;
+
         case 'join':
-            let returnMessage = addPlayer(user, message.author.id);
+            if(args.length < 2){
+                message.reply("Error joining a game. Please indicate the 'id' of the game you wish to join");
+                return;
+            }
+            let joinGame = getGameById(args[1]);
+            if(joinGame === null){
+                message.reply("Error joining a game. Game does not exist");
+                return;
+            }
+            let joiningUser = addUser(message.author.id, user);
+            if(joiningUser.gameId !== null){
+                message.reply("You are already in a game!");
+                return;
+            }
+            let returnMessage = joinGame.addPlayer(user, message.author.id);
+            //set the game for the user on the map
+            joiningUser.setGameId(args[1]);
+            usersMap.set(message.author.id, joiningUser);
             message.channel.send(returnMessage);
             break;
+
         case 'start':
-            let returnObject = start();
+            //edge case when user is not on the map
+            if(!usersMap.has(message.author.id)){
+                message.reply("You did not join a game to start!");
+                return;
+            }
+            let startGameId = getGameIdFromUser(message.author.id);
+            if(startGameId === null){
+                message.reply("You are currently not in a game!");
+                return;
+            }
+            let startGame = getGameById(startGameId);
+            let returnObject = startGame.startGame();
             if(returnObject.boolean){
-                let players = getPlayers();
+                let players = startGame.getPlayers();
                 players.forEach(player => {
                     bot.users.cache.get(player.id).send(displayCards(player.cards));
                 });
                 message.channel.send("User " + user + " is starting the game\n" +
-                                    "It is " + players[getCurrentPlayer()].name + "'s turn");
+                                    "It is " + players[startGame.getCurrentPlayer()].name + "'s turn");
                 return;
             } else {
                 message.channel.send(returnObject.message);
             }
             break;
+
         case 'table':
-            let cardsOnTable = displayCards(getTableCards());
+            let tableGameId = getGameIdFromUser(message.author.id);
+            if(tableGameId === null){
+                message.reply("You are currently not in a game!");
+                return;
+            }
+            let tableGame = getGameById(tableGameId);
+            let cardsOnTable = displayCards(tableGame.getTableCards());
             message.channel.send(cardsOnTable);
             break;
+
         case 'skip':
-            message.channel.send(handleSkip(user));
+            let skipGameid = getGameIdFromUser(message.author.id);
+            if(skipGameid === null){
+                message.reply("You are currently not in a game!");
+                return;
+            }
+            let skipGame = getGameById(skipGameid);
+            message.channel.send(skipGame.handleSkip(message.author.id));
             break;
+
         case 'play':
             let playingCards = args.slice(1);
-            let result = play(playingCards, user);
+            let playGameid = getGameIdFromUser(message.author.id);
+            if(playGameid === null){
+                message.reply("You are currently not in a game!");
+                return;
+            }
+            let playGame = getGameById(playGameid);
+            let result = playGame.play(playingCards, message.author.id);
             if(result.success){
                 if(result.player.cards.length === 0){
-                    resetGame();
+                    //resetGame();
+                    resetUsers(playGame.players);
+                    removeGameById(playGame.id);
                     message.channel.send(user + " won the game\nGame resetting");
                     return;
                 }
-                message.channel.send(user + " plays " + displayCards(result.cards) + "\n" + result.message);
+                message.channel.send(user + " plays\n" + displayCards(result.cards) + "\n" + result.message);
                 message.author.send(displayCards(result.player.cards));
             } else {
                 message.channel.send(result.message);
             }
             break;
+
     }
 });
 
