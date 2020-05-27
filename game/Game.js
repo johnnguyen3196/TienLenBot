@@ -13,6 +13,7 @@ class Game{
         this.currentPlayer = null;
         this.table = null;
         this.inProgress = false;
+        this.leaderboard = [];
     }
     addPlayer(player, id){
         if(this.inProgress){
@@ -78,7 +79,7 @@ class Game{
         }
         this.players[userIndex].skip = true;
         skipMessage = this.players[userIndex].name + " has skipped!";
-        return skipMessage + setNextPlayer(this.players, this.currentPlayer, this.table);
+        return skipMessage + setNextPlayer(this);
     }
 
     play(cardsIndex, playerId){
@@ -86,7 +87,8 @@ class Game{
             success: false,
             message: "",
             cards: [],
-            player: null
+            player: null,
+            win: false
         }
         let playerIndex = getPlayerById(playerId, this.players);
         if(playerIndex === null){
@@ -119,13 +121,18 @@ class Game{
             this.table.cards = chosenCards;
             this.table.type = type;
             removeCards(intCardsIndex, playerIndex, this.players);
-            returnObject.message = setNextPlayer(this.players, this.currentPlayer, this.table);
+            returnObject.message = setNextPlayer(this);
             returnObject.success = true;
             returnObject.cards = chosenCards;
             returnObject.player = this.players[playerIndex];
         } else {
             returnObject.message = "Your play does not beat the cards on the table"
             return returnObject;
+        }
+        if(this.players[playerIndex].cards.length === 0){
+            this.players[playerIndex].skip = true;
+            this.leaderboard.push(this.players[playerIndex]);
+            returnObject.win = true;
         }
         return returnObject;
     }
@@ -206,24 +213,25 @@ function findThreeOfSpades(players){
     return players[0];
 }
 
-function setNextPlayer(players, currentPlayer, table){
-    if(numberOfSkippedPlayers(players) === players.length -1){
-        return resetRound(players, currentPlayer, table);
+function setNextPlayer(game){
+    if(numberOfSkippedPlayers(game.players) === game.players.length - 1){
+        return resetRound(game);
     }
-    let currentIndex = currentPlayer;
+    let currentIndex = game.currentPlayer;
     let finish = false;
     while(!finish) {
-        if (currentIndex + 1 === players.length) {
+        if (currentIndex + 1 === game.players.length) {
             currentIndex = 0;
         } else {
             currentIndex++;
         }
-        if(!players[currentIndex].skip){
-            currentPlayer = currentIndex;
+        if(!game.players[currentIndex].skip){
+            game.currentPlayer = currentIndex;
             finish = true;
         }
     }
-    return "It is now " + players[currentPlayer].name + "'s turn";
+    console.log("current player: " + game.currentPlayer);
+    return "It is now " + game.players[game.currentPlayer].name + "'s turn";
 }
 
 function numberOfSkippedPlayers(players){
@@ -236,21 +244,25 @@ function numberOfSkippedPlayers(players){
     return i;
 }
 
-function resetRound(players, currentPlayer ,table){
+function resetRound(game){
     //last player that didn't skip
-    for(let i = 0; i < players.length; i++){
-        if(!players[i].skip){
-            currentPlayer = i;
+    for(let i = 0; i < game.players.length; i++){
+        if(!game.players[i].skip){
+            game.currentPlayer = i;
         }
     }
-    table.cards = [];
-    table.type = "";
-    table.size = 0;
+    game.table.cards = [];
+    game.table.type = "";
+    game.table.size = 0;
     //reset player state
-    players.forEach(player => {
-        player.skip = false;
+    game.players.forEach(player => {
+        //if the player is on the leaderboard (player has no more cards) they will always skip
+        if(game.leaderboard.indexOf(player) === -1) {
+            player.skip = false;
+        }
     });
-    return "\nAll players skipped\nIt is now " + players[currentPlayer].name + "'s turn";
+    console.log("current player in reset: " + game.currentPlayer);
+    return "\nAll players skipped\nIt is now " + game.players[game.currentPlayer].name + "'s turn";
 }
 
 function validSequence(cards){

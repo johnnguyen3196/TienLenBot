@@ -23,15 +23,18 @@ function displayCards(cards){
     for(let i = 0; i < cards.length; i++){
         message = message + i + ": " + discordNumber[indexOfNumber(cards[i].getNumber())] + " of " + suiteToEmoji(cards[i].getSuite()) + "\n";
     }
-    return message + "\n---------------------------------------------------";
+    return message + "---------------------------------------------------\n";
 }
 
 function displayAbout(){
     let exampleCards = [new Card("3", "Spade"), new Card("4", "Heart"), new Card("5", "Club")];
     return "Commands:\n" +
-           "join    - Allows the user to join a game\n\n" +
-           "start   - Allows the user to start a game. The bot will DM you the cards that are in your hand. ***There must be atleast 2 users who joined the game***\n\n" +
-           "table   - Displays the cards that are currently on the table\n\n" +
+           "create {id} - Allows the user to create a game with the corresponding 'id'\n\n" +
+           "join {id}   - Allows the user to join the game with the corresponding 'id'\n\n" +
+           "start   - Allows the user to start a game they joined. The bot will DM you the cards that are in your hand. ***There must be atleast 2 users who joined the game***\n\n" +
+           "table   - Displays the cards that are currently on the table ***The user must join a game before using this command***\n\n" +
+           "games   - Displays the current games created\n\n" +
+           "players - Displays the players in the current game ***The user must join a game before using this command***\n\n" +
            "skip    - The user will skip the current round\n\n" +
            "play {index} - The user plays the card[s] based on the index of the card on their current hand\n\n" +
            "Example of 'play' command with cards:\n" +
@@ -70,6 +73,22 @@ function indexOfNumber(number){
     return numbers.indexOf(number);
 }
 
+function addLastPlayerToLeaderBoard(game){
+    game.players.forEach(player => {
+       if(game.leaderboard.indexOf(player) === -1){
+           game.leaderboard.push(player);
+       }
+    });
+}
+
+function displayLeaderBoard(leaderBoard){
+    let message = "Game results:\n";
+    for(let i = 0; i < leaderBoard.length; i++){
+        message = message + (i + 1) + ": " + leaderBoard[i].name + "\n";
+    }
+    return message;
+}
+
 const PREFIX = '!13';
 const spade = "<:spade:714922167560568954>";
 const club = "<:club:714921850999930991>";
@@ -93,6 +112,24 @@ bot.on('message', message => {
     switch(args[0]){
         case 'about':
             message.channel.send(displayAbout());
+            break;
+
+        case 'games':
+            let displayGamesMessage = "";
+            games.forEach(game => {
+                displayGamesMessage = displayGamesMessage + "id: " + game.id + "\nnumber of players: " + game.players.length + "\n";
+                if(game.inProgress){
+                    displayGamesMessage = displayGamesMessage + "In Progress\n";
+                } else {
+                    displayGamesMessage = displayGamesMessage + "Open\n";
+                }
+                displayGamesMessage = displayGamesMessage + "---------------------------------------------------\n";
+            });
+            if(displayGamesMessage === ""){
+                message.channel.send("There are currently no games");
+                return;
+            }
+            message.channel.send(displayGamesMessage);
             break;
 
         case 'create':
@@ -128,6 +165,25 @@ bot.on('message', message => {
             joiningUser.setGameId(args[1]);
             usersMap.set(message.author.id, joiningUser);
             message.channel.send(returnMessage);
+            break;
+
+        case 'players':
+            //edge case when user is not on the map
+            if(!usersMap.has(message.author.id)){
+                message.reply("You are currently not in a game!");
+                return;
+            }
+            let playersGameId = getGameIdFromUser(message.author.id);
+            if(playersGameId === null){
+                message.reply("You are currently not in a game!");
+                return;
+            }
+            let playersGame = getGameById(playersGameId);
+            let playersMessage = "Players in game '" + playersGame.id + "'\n";
+            playersGame.players.forEach(player => {
+                playersMessage = playersMessage + "User: " + player.name + "\n";
+            });
+            message.channel.send(playersMessage);
             break;
 
         case 'start':
@@ -187,14 +243,25 @@ bot.on('message', message => {
             let playGame = getGameById(playGameid);
             let result = playGame.play(playingCards, message.author.id);
             if(result.success){
-                if(result.player.cards.length === 0){
-                    //resetGame();
-                    resetUsers(playGame.players);
-                    removeGameById(playGame.id);
-                    message.channel.send(user + " won the game\nGame resetting");
+                // if(result.player.cards.length === 0){
+                //     //resetGame();
+                //     resetUsers(playGame.players);
+                //     removeGameById(playGame.id);
+                //     message.channel.send(user + " won the game\nGame resetting");
+                //     return;
+                // }
+                if(result.win){
+                    if(playGame.players.length - playGame.leaderboard.length !== 1) {
+                        message.channel.send(user + " plays\n" + displayCards(result.cards) + "User " + user + " ran out of cards\n" + result.message);
+                    } else {
+                        addLastPlayerToLeaderBoard(playGame);
+                        message.channel.send(user + " plays\n" + displayCards(result.cards) + "User " + user + " ran out of cards\n" + "GAMEOVER\n" + displayLeaderBoard(playGame.leaderboard) + "Resetting Game ....");
+                        resetUsers(playGame.players);
+                        removeGameById(playGame.id);
+                    }
                     return;
                 }
-                message.channel.send(user + " plays\n" + displayCards(result.cards) + "\n" + result.message);
+                message.channel.send(user + " plays\n" + displayCards(result.cards) + result.message);
                 message.author.send(displayCards(result.player.cards));
             } else {
                 message.channel.send(result.message);
