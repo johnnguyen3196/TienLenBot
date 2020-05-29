@@ -7,40 +7,52 @@ const suites = ["Spade", "Club", "Diamond", "Heart"];
 
 class Game{
     constructor(id){
+        //name of the game
         this.id = id;
         this.players = [];
         this.cards = [];
+        //index of the current player
         this.currentPlayer = null;
+        //table holds the cards played in a previous turn
         this.table = null;
         this.inProgress = false;
         this.leaderboard = [];
     }
+
     addPlayer(player, id){
-        if(this.inProgress){
-            return "Error: Match is currently in progress!";
+        let returnObject = {
+            success: false,
+            message: ""
         }
-        if(this.players.length <= 4){
+        if(this.inProgress){
+            returnObject.message = "Error: Match is currently in progress!";
+            return returnObject;
+        }
+        if(this.players.length < 4){
             let newPlayer = new Player(player, id);
             newPlayer.gameId = this.id;
             this.players.push(newPlayer);
-            return "User " + player + " joined the game '" + this.id + "'";
+            returnObject.success = true;
+            returnObject.message = "User " + player + " joined the game '" + this.id + "'";
+            return returnObject;
         } else {
-            return "Error: Max player limit reached!";
+            returnObject.message = "Error: Max player limit reached!"
+            return returnObject;
         }
     }
 
     startGame(){
         let returnObject = {
-            boolean: false,
+            success: false,
             message: ""
         };
         if(this.inProgress){
-            returnObject.boolean = false;
+            returnObject.success = false;
             returnObject.message = "Error: You can't start a game that is already in progress!"
             return returnObject;
         }
         if(this.players.length === 1 || this.players.length === 0){
-            returnObject.boolean = false;
+            returnObject.success = false;
             returnObject.message = "Sorry, you can't play by yourself :(";
             this.inProgress = false;
             return returnObject;
@@ -49,7 +61,7 @@ class Game{
         distributeCards(this.players.length, this.players, this.cards);
         this.currentPlayer = this.players.indexOf(findThreeOfSpades(this.players));
         this.inProgress = true;
-        returnObject.boolean = true;
+        returnObject.success = true;
         this.table = new Table();
         return returnObject;
     }
@@ -137,12 +149,15 @@ class Game{
         return returnObject;
     }
 
-    // resetGame(){
-    //     players = [];
-    //     this.currentPlayer = null;
-    //     this.table = null;
-    //     this.inProgress = false;
-    // }
+    removePlayer(id){
+        for(let i = 0; i < this.players.length; i++){
+            if(this.players[i].id === id){
+                this.players.splice(i, 1);
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 function createDeck(){
@@ -185,6 +200,7 @@ function contains(cards, number, suite){
     return false;
 }
 
+//Organize the shuffled cards based on number and suite
 function organizeCards(cards){
     let organized = [];
     numbers.forEach(number => {
@@ -214,11 +230,13 @@ function findThreeOfSpades(players){
 }
 
 function setNextPlayer(game){
+    //One player is left playing the round. Reset.
     if(numberOfSkippedPlayers(game.players) === game.players.length - 1){
         return resetRound(game);
     }
     let currentIndex = game.currentPlayer;
     let finish = false;
+    //look for the next player that didn't skip
     while(!finish) {
         if (currentIndex + 1 === game.players.length) {
             currentIndex = 0;
@@ -230,7 +248,6 @@ function setNextPlayer(game){
             finish = true;
         }
     }
-    console.log("current player: " + game.currentPlayer);
     return "It is now " + game.players[game.currentPlayer].name + "'s turn";
 }
 
@@ -261,10 +278,10 @@ function resetRound(game){
             player.skip = false;
         }
     });
-    console.log("current player in reset: " + game.currentPlayer);
     return "\nAll players skipped\nIt is now " + game.players[game.currentPlayer].name + "'s turn";
 }
 
+//check if the cards are a valid sequence based on numbers
 function validSequence(cards){
     for(let i = 0; i < cards.length - 1; i++){
         if(!(numbers.indexOf(cards[i + 1].number) - numbers.indexOf(cards[i].number) === 1)){
@@ -274,10 +291,12 @@ function validSequence(cards){
     return true;
 }
 
+//checks if cards beat the cards on the table
 function compareToTable(cards, type, table){
     if(table.cards.length === 0){
         return true;
     }
+    //Bombs always beat a single 2
     if(table.type === "Single" && table.cards[0].getNumber() === "2" && type === "Bomb"){
         return true;
     }
@@ -291,6 +310,7 @@ function compareToTable(cards, type, table){
     if(lastCardIndex > lastTableCardIndex){
         return true;
     } else {
+        //check for the suite of the last cards
         if(lastCardIndex === lastTableCardIndex){
             if(suites.indexOf(lastCard.suite)  > suites.indexOf(lastTableCard.suite)){
                 return true;
