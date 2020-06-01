@@ -29,16 +29,16 @@ function displayCards(cards){
 
 function displayAbout(){
     let exampleCards = [new Card("3", "Spade"), new Card("4", "Heart"), new Card("5", "Club")];
-    return "Commands:\n" +
-           "create {id} - Allows the user to create a game with the corresponding 'id'\n\n" +
-           "join {id}   - Allows the user to join the game with the corresponding 'id'\n\n" +
-           "leave   - Allows the user to leave a game they joined. ***The user must join a game before using this command and cannot leave in the middle of a game***\n\n" +
-           "start   - Allows the user to start a game they joined. The bot will DM you the cards that are in your hand. ***There must be atleast 2 users who joined the game***\n\n" +
-           "table   - Displays the cards that are currently on the table ***The user must join a game before using this command***\n\n" +
-           "games   - Displays the current games created\n\n" +
-           "players - Displays the players in the current game ***The user must join a game before using this command***\n\n" +
-           "skip    - The user will skip the current round\n\n" +
-           "play {index} - The user plays the card[s] based on the index of the card on their current hand\n\n" +
+    return "***Commands***:\n" +
+           "***create*** {id} - Allows the user to create a game with the corresponding 'id'\n\n" +
+           "***join*** {id}   - Allows the user to join the game with the corresponding 'id'\n\n" +
+           "***leave***   - Allows the user to leave a game they joined. ***The user must join a game before using this command and cannot leave in the middle of a game***\n\n" +
+           "***start***   - Allows the user to start a game they joined. The bot will DM you the cards that are in your hand. ***There must be atleast 2 users who joined the game***\n\n" +
+           "***table***   - Displays the cards that are currently on the table ***The user must join a game before using this command***\n\n" +
+           "***games***   - Displays the current games created\n\n" +
+           "***players*** - Displays the players in the current game ***The user must join a game before using this command***\n\n" +
+           "***skip***    - The user will skip the current round\n\n" +
+           "***play*** {index} - The user plays the card[s] based on the index of the card on their current hand\n\n" +
            "Example of 'play' command with cards:\n" +
             displayCards(exampleCards) +
            "\n\n!13 play 0 1 2\n\n" +
