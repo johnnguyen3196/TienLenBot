@@ -1,6 +1,8 @@
 const Discord = require('discord.js');
 const bot = new Discord.Client();
-const {token, developerId} = require('./key.js');
+let MongoClient = require('mongodb').MongoClient;
+
+const {token, developerId, mongoKey} = require('./key.js');
 const Game = require("./game/Game");
 const Card = require("./game/Card");
 const Player = require("./game/Player");
@@ -39,6 +41,7 @@ function displayAbout(){
            "***players*** - Displays the players in the current game ***The user must join a game before using this command***\n\n" +
            "***skip***    - The user will skip the current round\n\n" +
            "***history*** - Displays all the plays and skips of the current game\n\n" +
+           "***stats***   - The bot privately messages the user's stats\n\n" +
            "***play*** {index} - The user plays the card[s] based on the index of the card on their current hand\n\n" +
            "Example of 'play' command with cards:\n" +
             displayCards(exampleCards) +
@@ -52,8 +55,10 @@ function getGameById(id){
 }
 
 function addUser(id, username){
-    let newUser = new Player(username, id)
-    usersMap.set(id, newUser);
+    let newUser = new Player(username, id);
+    if(!usersMap.has(newUser)){
+        usersMap.set(id, newUser);
+    }
     return newUser;
 }
 
@@ -94,10 +99,10 @@ function displayLeaderBoard(leaderBoard){
 }
 
 function handleError(error, errorMessage){
-    if(!usersMap.has(errorMessage.author.id)){
-        bot.users.cache.get(developerId).send("ERROR in channel " + errorMessage.channel.name + " in guild " + errorMessage.guild.name + " by user " + errorMessage.author.username + "\n\n```" + error + "```");
-        return "Uh oh, something went wrong. Try again";
-    }
+    // if(!usersMap.has(errorMessage.author.id)){
+    //     bot.users.cache.get(developerId).send("ERROR in channel " + errorMessage.channel.name + " in guild " + errorMessage.guild.name + " by user " + errorMessage.author.username + "\n\n```" + error + "```");
+    //     return "Uh oh, something went wrong. Try again";
+    // }
     let user = usersMap.get(errorMessage.author.id);
     if(user.gameId === null){
         bot.users.cache.get(developerId).send("ERROR in channel " + errorMessage.channel + " in guild " + errorMessage.guild + "by user " + errorMessage.author.username + "\n\n```" + error + "```");
@@ -110,7 +115,46 @@ function handleError(error, errorMessage){
     return "Something went wrong with the game. All game progress lost. Try starting a new game";
 }
 
+function updateDatabaseStats(leaderboard, db){
+    let promises = [];
+    leaderboard.forEach(player => {
+        promises.push(db.collection('players').findOne({discordId: player.id}));
+    });
+    Promise.all(promises).then(players => {
+        players.forEach((player, i) => {
+            if(player === null){
+                let playerObject = {
+                    name: leaderboard[i].name,
+                    discordId: leaderboard[i].id,
+                    stats: [0, 0 ,0, 0]
+                };
+                playerObject.stats[i]++;
+                db.collection('players').insertOne(playerObject);
+            } else {
+                let query = 'stats.' + i.toString();
+                db.collection('players').update({discordId: player.discordId}, {$inc: {[query]:1}});
+            }
+        });
+    })
+}
+
+function getStats(resolve, db, id, username){
+    db.collection('players').findOne({discordId: id}).then(player => {
+        if(player === null){
+            let playerObject = {
+                name: username,
+                discordId: id,
+                stats: [0, 0 ,0, 0]
+            };
+            db.collection('players').insertOne(playerObject);
+            resolve(playerObject);
+        }
+        resolve(player);
+    });
+}
+
 const PREFIX = '!13';
+//Discord emotes
 const spade = "<:spade:714922167560568954>";
 const club = "<:club:714921850999930991>";
 const diamond = "<:diamond:714920441612861590>"
@@ -125,14 +169,19 @@ let gamesMap = new Map();
 //keeps track of all users that are playing games
 let usersMap = new Map();
 
+let db = null;
 bot.on('ready', () => {
-    console.log('Bot online');
+    MongoClient.connect(mongoKey, { useUnifiedTopology: true },function (err, client) {
+        db = client.db('bot');
+        console.log('Bot online');
+    });
 });
 
 bot.on('message', message => {
     try {
         let args = message.content.substring(PREFIX.length + 1).split(" ");
-        let user = message.author.username;
+        let username = message.author.username;
+        addUser(message.author.id, username);
         switch (args[0]) {
             case 'about':
                 message.channel.send(displayAbout());
@@ -179,12 +228,12 @@ bot.on('message', message => {
                     message.reply("Error joining a game. Game does not exist");
                     return;
                 }
-                let joiningUser = addUser(message.author.id, user);
+                let joiningUser = addUser(message.author.id, username);
                 if (joiningUser.gameId !== null) {
                     message.reply("You are already in a game!");
                     return;
                 }
-                let returnMessage = joinGame.addPlayer(user, message.author.id);
+                let returnMessage = joinGame.addPlayer(username, message.author.id);
                 //set the game for the user on the map
                 if (returnMessage.success) {
                     joiningUser.setGameId(args[1]);
@@ -194,11 +243,12 @@ bot.on('message', message => {
                 break;
 
             case 'leave':
-                if (!usersMap.has(message.author.id)) {
-                    message.reply("You did not join a game to leave!");
+                let leaveGameId = getGameIdFromUser(message.author.id);
+                if(leaveGameId === null){
+                    message.reply("You are currently not in a game!");
                     return;
                 }
-                let leaveGame = getGameById(getGameIdFromUser(message.author.id));
+                let leaveGame = getGameById(leaveGameId);
                 if (leaveGame.inProgress) {
                     message.reply("Error removing you from the game. You cannot leave a game that is currently in progress.");
                     return;
@@ -215,10 +265,10 @@ bot.on('message', message => {
 
             case 'players':
                 //edge case when user is not on the map
-                if (!usersMap.has(message.author.id)) {
-                    message.reply("You are currently not in a game!");
-                    return;
-                }
+                // if (!usersMap.has(message.author.id)) {
+                //     message.reply("You are currently not in a game!");
+                //     return;
+                // }
                 let playersGameId = getGameIdFromUser(message.author.id);
                 if (playersGameId === null) {
                     message.reply("You are currently not in a game!");
@@ -234,10 +284,10 @@ bot.on('message', message => {
 
             case 'start':
                 //edge case when user is not on the map
-                if (!usersMap.has(message.author.id)) {
-                    message.reply("You did not join a game to start!");
-                    return;
-                }
+                // if (!usersMap.has(message.author.id)) {
+                //     message.reply("You did not join a game to start!");
+                //     return;
+                // }
                 let startGameId = getGameIdFromUser(message.author.id);
                 if (startGameId === null) {
                     message.reply("You are currently not in a game!");
@@ -251,7 +301,7 @@ bot.on('message', message => {
                     players.forEach(player => {
                         bot.users.cache.get(player.id).send(displayCards(player.cards));
                     });
-                    message.channel.send("User " + user + " is starting the game\n" +
+                    message.channel.send("User " + username + " is starting the game\n" +
                         "It is " + players[startGame.getCurrentPlayer()].name + "'s turn");
                     return;
                 } else {
@@ -293,17 +343,18 @@ bot.on('message', message => {
                     if (result.win) {
                         //The current player ran out of cards. Add them to the leaderboard. Continue playing.
                         if (playGame.players.length - playGame.leaderboard.length !== 1) {
-                            message.channel.send(user + " plays\n" + displayCards(result.cards) + "User " + user + " ran out of cards\n" + result.message);
+                            message.channel.send(username + " plays\n" + displayCards(result.cards) + "User " + username + " ran out of cards\n" + result.message);
                         } else {
                             //All but one player ran out of cards. Add the last player to the leaderboard and end the game.
                             addLastPlayerToLeaderBoard(playGame);
-                            message.channel.send(user + " plays\n" + displayCards(result.cards) + "User " + user + " ran out of cards\n" + "GAMEOVER\n" + displayLeaderBoard(playGame.leaderboard) + "Resetting Game ....");
+                            message.channel.send(username + " plays\n" + displayCards(result.cards) + "User " + username + " ran out of cards\n" + "GAMEOVER\n" + displayLeaderBoard(playGame.leaderboard) + "Resetting Game ....");
+                            updateDatabaseStats(playGame.leaderboard, db);
                             resetUsers(playGame.players);
                             removeGameById(playGame.id);
                         }
                         return;
                     }
-                    message.channel.send(user + " plays\n" + displayCards(result.cards) + result.message);
+                    message.channel.send(username + " plays\n" + displayCards(result.cards) + result.message);
                     //dm the player their updated playing hand
                     message.author.send(displayCards(result.player.cards));
                 } else {
@@ -313,11 +364,6 @@ bot.on('message', message => {
                 break;
 
             case 'history':
-                //edge case when user is not on the map
-                if (!usersMap.has(message.author.id)) {
-                    message.reply("You did not start a game to see the game's history!");
-                    return;
-                }
                 let historyGameId = getGameIdFromUser(message.author.id);
                 if (historyGameId === null) {
                     message.reply("You are currently not in a game!");
@@ -337,6 +383,14 @@ bot.on('message', message => {
                     }
                 });
                 message.channel.send(response);
+                break;
+
+            case 'stats':
+                let promise = new Promise(resolve => getStats(resolve, db, message.author.id, username));
+                promise.then(playerStats => {
+                    let statMessage = 'Stats for player: ' + username + "\n1st: " + playerStats.stats[0] + "\n2nd: " + playerStats.stats[1] + "\n3rd: " + playerStats.stats[2] + "\n4th: " + playerStats.stats[3];
+                    message.author.send(statMessage);
+                });
         }
     } catch(error) {
         message.channel.send(handleError(error, message));
@@ -344,5 +398,6 @@ bot.on('message', message => {
 });
 
 module.exports = {
-    displayCards
+    getStats,
+    updateDatabaseStats
 }
