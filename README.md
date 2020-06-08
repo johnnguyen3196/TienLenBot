@@ -12,6 +12,7 @@ Bot Prefix: ***!13***
 ***games***   - Displays the current games created<br/>
 ***players*** - Displays the players in the current game ***The user must join a game before using this command<br/>
 ***skip***    - The user will skip the current round<br/>
+***history*** - Displays all the plays and skips of the current game<br/>
 ***play*** {index} - The user plays the card[s] based on the index of the card on their current hand<br/>
 
 #Invite Link:<br/>

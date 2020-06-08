@@ -38,6 +38,7 @@ function displayAbout(){
            "***games***   - Displays the current games created\n\n" +
            "***players*** - Displays the players in the current game ***The user must join a game before using this command***\n\n" +
            "***skip***    - The user will skip the current round\n\n" +
+           "***history*** - Displays all the plays and skips of the current game\n\n" +
            "***play*** {index} - The user plays the card[s] based on the index of the card on their current hand\n\n" +
            "Example of 'play' command with cards:\n" +
             displayCards(exampleCards) +
@@ -61,6 +62,7 @@ function getGameIdFromUser(userId){
     return user.gameId;
 }
 
+//remove users from finished games
 function resetUsers(users){
     users.forEach(user => {
        usersMap.set(user.id, new Player(user.name, user.id));
@@ -104,7 +106,7 @@ function handleError(error, errorMessage){
     let game = getGameById(user.gameId);
     resetUsers(game.players);
     removeGameById(game.id);
-    bot.users.cache.get(developerId).send("ERROR in channel " + errorMessage.channel + " in guild " + errorMessage.guild + "by user " + errorMessage.author.username + "\n\n```" + error + "```");
+    bot.users.cache.get(developerId).send("ERROR in channel " + errorMessage.channel + " in guild " + errorMessage.guild + "by user " + errorMessage.author.username + "\n\n```" + error.stack + "```");
     return "Something went wrong with the game. All game progress lost. Try starting a new game";
 }
 
@@ -132,9 +134,6 @@ bot.on('message', message => {
         let args = message.content.substring(PREFIX.length + 1).split(" ");
         let user = message.author.username;
         switch (args[0]) {
-            case 'lol':
-                asdfjklw;
-                break;
             case 'about':
                 message.channel.send(displayAbout());
                 break;
@@ -312,6 +311,32 @@ bot.on('message', message => {
                     message.channel.send(result.message);
                 }
                 break;
+
+            case 'history':
+                //edge case when user is not on the map
+                if (!usersMap.has(message.author.id)) {
+                    message.reply("You did not start a game to see the game's history!");
+                    return;
+                }
+                let historyGameId = getGameIdFromUser(message.author.id);
+                if (historyGameId === null) {
+                    message.reply("You are currently not in a game!");
+                    return;
+                }
+                let historyGame = getGameById(historyGameId);
+                if(historyGame.history.length === 0){
+                    message.channel.send("The game has no history");
+                    return;
+                }
+                let response = '';
+                historyGame.history.forEach(play => {
+                    if(play.skip === true){
+                        response = response + play.player.name + " has skipped!\n---------------------------------------------------\n";
+                    }else{
+                        response = response + play.player.name + " plays\n" + displayCards(play.cards);
+                    }
+                });
+                message.channel.send(response);
         }
     } catch(error) {
         message.channel.send(handleError(error, message));

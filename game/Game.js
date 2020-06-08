@@ -17,6 +17,7 @@ class Game{
         this.table = null;
         this.inProgress = false;
         this.leaderboard = [];
+        this.history = [];
     }
 
     addPlayer(player, id){
@@ -90,7 +91,9 @@ class Game{
             return skipMessage;
         }
         this.players[userIndex].skip = true;
-        skipMessage = this.players[userIndex].name + " has skipped!";
+        skipMessage = this.players[userIndex].name + " has skipped! ";
+        //add this skip to the history
+        addHistory("", this.players[userIndex], this.history, true);
         return skipMessage + setNextPlayer(this);
     }
 
@@ -124,29 +127,37 @@ class Game{
             chosenCards.push(this.players[playerIndex].cards[index]);
         });
 
-        let type = validPlay(chosenCards, this.table);
-        if(!type){
+        try{
+            let type = validPlay(chosenCards, this.table);
+            if(!type){
+                returnObject.message = "Invalid Play";
+                return returnObject;
+            }
+            if(compareToTable(chosenCards, type, this.table)){
+                this.table.cards = chosenCards;
+                this.table.type = type;
+                removeCards(intCardsIndex, playerIndex, this.players);
+                returnObject.message = setNextPlayer(this);
+                returnObject.success = true;
+                returnObject.cards = chosenCards;
+                returnObject.player = this.players[playerIndex];
+            } else {
+                returnObject.message = "Your play does not beat the cards on the table"
+                return returnObject;
+            }
+            if(this.players[playerIndex].cards.length === 0){
+                this.players[playerIndex].skip = true;
+                this.leaderboard.push(this.players[playerIndex]);
+                returnObject.win = true;
+            }
+            //add the current play to the game's history
+            addHistory(chosenCards, this.players[playerIndex], this.history, false);
+            return returnObject;
+        }catch{
             returnObject.message = "Invalid Play";
             return returnObject;
         }
-        if(compareToTable(chosenCards, type, this.table)){
-            this.table.cards = chosenCards;
-            this.table.type = type;
-            removeCards(intCardsIndex, playerIndex, this.players);
-            returnObject.message = setNextPlayer(this);
-            returnObject.success = true;
-            returnObject.cards = chosenCards;
-            returnObject.player = this.players[playerIndex];
-        } else {
-            returnObject.message = "Your play does not beat the cards on the table"
-            return returnObject;
-        }
-        if(this.players[playerIndex].cards.length === 0){
-            this.players[playerIndex].skip = true;
-            this.leaderboard.push(this.players[playerIndex]);
-            returnObject.win = true;
-        }
-        return returnObject;
+
     }
 
     removePlayer(id){
@@ -383,6 +394,10 @@ function validPlay(cards, table){
     } else {
         return false;
     }
+}
+
+function addHistory(cards, player, history, skip){
+    history.push({cards: cards, player: player, skip: skip});
 }
 
 module.exports = Game;
